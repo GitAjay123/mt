@@ -1,7 +1,7 @@
 const cheerio = require("cheerio");
 const axios = require("axios");
 
-const usage = "https://metaagrabber.vercel.app/api?url=https://discord.com";
+const usage = "https://detaagraber.vercel.app/api?url=https://google.com";
 const titleRegexp = /<title>([\s\S]*?)<\/title>/i;
 const descriptionRegex = /<meta[^>]*name=['"]description['"][^>]*content=['"]([^']*)['"][^>]*\/?>/i;
 
@@ -32,7 +32,7 @@ async function fetchPage(url) {
 }
 
 // ===============================
-// 🏪 META SCRAPER FUNCTION
+// 🏪 DETA SCRAPER FUNCTION
 // ===============================
 async function meta(urrl) {
   const page = await fetchPage(urrl);
