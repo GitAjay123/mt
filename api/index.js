@@ -55,8 +55,11 @@ async function meta(urrl) {
   const isAmzn = urrl.includes("amazon.") || urrl.includes("amzn.");
   const isFlipkart =
     urrl.includes("flipkart.") ||
-    urrl.includes("fkrt.") ||
-    urrl.includes("fktr.");
+    urrl.includes("fkrt.to") ||
+    urrl.includes("fkrt.it") ||
+    urrl.includes("fktr.in") ||
+    urrl.includes("dl.flipkart.com/s/") ||
+    urrl.includes("fkrt.site");
 
   // ==================================================
   // 🟢 AMAZON SECTION
