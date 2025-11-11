@@ -53,7 +53,7 @@ async function meta(urrl) {
   const html = $.html();
 
   const isAmzn = urrl.includes("amazon.") || urrl.includes("amzn.");
-  const isFlipkart = urrl.includes("flipkart.com");
+  const isFlipkart = urrl.includes("flipkart.com"); || urrl.includes("fkrt."); || urrl.includes("fktr.");
 
   // ==================================================
   // 🟢 AMAZON SECTION
