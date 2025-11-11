@@ -130,7 +130,7 @@ async function meta(urrl) {
 
     if (image && image.startsWith("//")) image = "https:" + image;
 
-    const icon = "https://www.flipkart.com/favicon.ico";
+    const icon = "https://static-assets-web.flixcart.com/www/promos/new/20150528-140547-favicon-retina.ico";
 
     return {
       success: true,
