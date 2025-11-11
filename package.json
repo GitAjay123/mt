@@ -1,7 +1,7 @@
 {
-  "name": "meta-grabber-serverless",
+  "name": "metagrabberserverless",
   "version": "1.0.0",
-  "description": "Meta Grabber API built using serverless functions.",
+  "description": "API built using serverless functions.",
   "main": "server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
