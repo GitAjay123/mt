@@ -2,130 +2,215 @@ const cheerio = require("cheerio");
 const axios = require("axios");
 
 const usage = "https://metaagrabber.vercel.app/api?url=https://discord.com";
-
-// Use non-global regex so exec() doesn't advance lastIndex unexpectedly
 const titleRegexp = /<title>([\s\S]*?)<\/title>/i;
-const descriptionRegex = /<meta[^>]*name=["']description["'][^>]*content=["']([^']*)["'][^>]*\/?>/i;
+const descriptionRegex = /<meta[^>]*name=['"]description['"][^>]*content=['"]([^']*)['"][^>]*\/?>/i;
 
+const userAgents = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Safari/605.1.15",
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.85 Safari/537.36"
+];
+
+async function fetchPage(url) {
+  try {
+    const response = await axios.get(url, {
+      headers: {
+        "User-Agent": userAgents[Math.floor(Math.random() * userAgents.length)],
+        "Accept-Language": "en-US,en;q=0.9",
+        Accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        Connection: "keep-alive"
+      },
+      maxRedirects: 5,
+      timeout: 30000
+    });
+    return response.data;
+  } catch (err) {
+    console.warn("⚠️ Fetch failed:", err.message);
+    return null;
+  }
+}
+
+// ===============================
+// 🏪 META SCRAPER FUNCTION
+// ===============================
 async function meta(urrl) {
-  const res = await axios.get(urrl, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.5005.61 Safari/537.36"
-    },
-    // allow redirects (axios does by default)
-    maxRedirects: 5,
-    timeout: 15000
-  });
+  const page = await fetchPage(urrl);
+  if (!page) {
+    return {
+      success: false,
+      url: urrl,
+      title: "",
+      description: "",
+      image: "",
+      icon: "",
+      site_name: "",
+      error: "Failed to fetch page or request timed out."
+    };
+  }
 
-  const page = res.data;
   const $ = cheerio.load(page);
   const html = $.html();
 
-  // detect amazon more robustly: original url OR final response URL OR page HTML markers
-  const finalUrl = (res.request && res.request.res && res.request.res.responseUrl) || urrl;
-  const isAmzn =
-    /amazon\./i.test(finalUrl) ||
-    /amzn\.to/i.test(finalUrl) ||
-    /m\.media-amazon\.com/i.test(html) ||
-    /dp\/[A-Z0-9]{10}/i.test(html); // fallback check for ASIN pattern
+  const isAmzn = urrl.includes("amazon.") || urrl.includes("amzn.");
+  const isFlipkart = urrl.includes("flipkart.com");
 
-  const isFlipkart = /flipkart\.com/i.test(finalUrl);
+  // ==================================================
+  // 🟢 AMAZON SECTION
+  // ==================================================
+  if (isAmzn) {
+    const title =
+      $('meta[property="og:title"]').attr("content") ||
+      $("title").text() ||
+      $('meta[name="title"]').attr("content") ||
+      (titleRegexp.exec(html) && titleRegexp.exec(html)[1]) ||
+      "";
 
-  // Title (use your order of fallbacks, but avoid calling exec twice)
-  const titleMeta = $('meta[property="og:title"]').attr('content');
-  let title = titleMeta || $('title').text() || $('meta[name="title"]').attr('content');
-  if ((!title || title.trim() === "") && titleRegexp.test(html)) {
-    const tmatch = titleRegexp.exec(html);
-    if (tmatch && tmatch[1]) title = tmatch[1];
-  }
-  title = (title || "").trim();
+    const description =
+      $('meta[property="og:description"]').attr("content") ||
+      $('meta[name="description"]').attr("content") ||
+      (descriptionRegex.exec(html) && descriptionRegex.exec(html)[1]) ||
+      "";
 
-  // Description (use og:description, meta[name="description"], or regex)
-  const descMeta = $('meta[property="og:description"]').attr('content') || $('meta[name="description"]').attr('content');
-  let description = descMeta;
-  if ((!description || description.trim() === "") && descriptionRegex.test(html)) {
-    const dmatch = descriptionRegex.exec(html);
-    if (dmatch && dmatch[1]) description = dmatch[1];
-  }
-  description = (description || "").trim();
+    const url =
+      $('meta[property="og:url"]').attr("content") ||
+      $('link[rel="canonical"]').attr("href") ||
+      urrl;
 
-  // URL: prefer og:url, then canonical, then finalUrl or input
-  const ogUrl = $('meta[property="og:url"]').attr('content');
-  const canonical = $('link[rel="canonical"]').attr('href');
-  const url = ogUrl || canonical || finalUrl || urrl;
+    let image =
+      $('meta[property="og:image"]').attr("content") ||
+      $('meta[property="og:image:url"]').attr("content") ||
+      $('meta[name="twitter:image"]').attr("content") ||
+      "";
 
-  // Site name
-  let site_name = $('meta[property="og:site_name"]').attr('content') || '';
-  if (isAmzn) site_name = "Amazon";
-  else if (isFlipkart) site_name = "Flipkart";
-
-  // Image: prefer og:image or og:image:url or twitter:image
-  let image = $('meta[property="og:image"]').attr('content') || $('meta[property="og:image:url"]').attr('content') || $('meta[name="twitter:image"]').attr('content') || "";
-
-  // AMAZON-specific fallback: match m.media-amazon.com images like your original code
-  if (isAmzn && !image) {
-    const amazonImageMatches = html.match(/https:\/\/m\.media-amazon\.com\/images\/I\/[^;"']*_.jpg/g);
-    if (amazonImageMatches) {
-      // filter out ones with commas (as you did) and pick first
-      const filtered = amazonImageMatches.filter(img => !img.includes(","));
-      if (filtered.length) image = filtered[0];
+    const amazonImageMatches = html.match(
+      /https:\/\/m\.media-amazon\.com\/images\/I\/[^;"']*_.jpg/g
+    );
+    if (!image && amazonImageMatches) {
+      image = amazonImageMatches.filter((img) => !img.includes(","))[0];
     }
+
+    if (image && image.startsWith("//")) image = "https:" + image;
+
+    const icon = "https://www.amazon.com/favicon.ico";
+
+    return {
+      success: true,
+      site_name: "Amazon",
+      title: title.trim(),
+      description: description.trim(),
+      url: url || urrl,
+      image: (image || icon).replace(/amp;/g, ""),
+      icon
+    };
   }
 
-  // FLIPKART-specific fallback (keep simple detection; you can add classes you prefer)
-  if (isFlipkart && !image) {
-    const imgEl = $('img[class*="_396cs4"], img[class*="_2r_T1I"], img[class*="_3exPp9"]').first();
-    image = imgEl.attr('src') || imgEl.attr('data-src') || imgEl.attr('data-srcset')?.split(" ")[0] || image;
+  // ==================================================
+  // 🟠 FLIPKART SECTION
+  // ==================================================
+  if (isFlipkart) {
+    const title =
+      $("span.B_NuCI").text().trim() ||
+      $('meta[property="og:title"]').attr("content") ||
+      $("title").text().trim() ||
+      "";
+
+    const description =
+      $("div._1mXcCf").text().trim() ||
+      $('meta[property="og:description"]').attr("content") ||
+      $('meta[name="description"]').attr("content") ||
+      "";
+
+    let image =
+      $("img._396cs4").attr("src") ||
+      $("img._2r_T1I").attr("src") ||
+      $("img._3exPp9").attr("src") ||
+      $('meta[property="og:image"]').attr("content") ||
+      "";
+
+    if (image && image.startsWith("//")) image = "https:" + image;
+
+    const icon = "https://www.flipkart.com/favicon.ico";
+
+    return {
+      success: true,
+      site_name: "Flipkart",
+      title: title.trim(),
+      description: description.trim(),
+      url: urrl,
+      image: (image || icon).replace(/amp;/g, ""),
+      icon
+    };
   }
 
-  // normalize protocol-less urls
+  // ==================================================
+  // ⚪ GENERIC FALLBACK SECTION
+  // ==================================================
+  const title =
+    $('meta[property="og:title"]').attr("content") ||
+    $("title").text() ||
+    $('meta[name="title"]').attr("content") ||
+    (titleRegexp.exec(html) && titleRegexp.exec(html)[1]) ||
+    "";
+
+  const description =
+    $('meta[property="og:description"]').attr("content") ||
+    $('meta[name="description"]').attr("content") ||
+    (descriptionRegex.exec(html) && descriptionRegex.exec(html)[1]) ||
+    "";
+
+  const url =
+    $('meta[property="og:url"]').attr("content") ||
+    $('link[rel="canonical"]').attr("href") ||
+    urrl;
+
+  let image =
+    $('meta[property="og:image"]').attr("content") ||
+    $('meta[name="twitter:image"]').attr("content") ||
+    "";
+
   if (image && image.startsWith("//")) image = "https:" + image;
 
-  // Icon fallback: mirror your Amazon code behavior
-  const rawIcon = $('link[rel="icon"]').attr('href') || $('link[rel="shortcut icon"]').attr('href') || "";
-  const icon = isAmzn ? `https://www.amazon.com/favicon.ico` : (isFlipkart ? `https://www.flipkart.com/favicon.ico` : rawIcon);
+  const icon =
+    $('link[rel="icon"]').attr("href") ||
+    $('link[rel="shortcut icon"]').attr("href") ||
+    "";
 
-  if (!image) image = icon;
-  image = (image || "").replace(/amp;/g, "");
-
-  // Keywords
-  const keywords = $('meta[property="og:keywords"]').attr('content') || $('meta[name="keywords"]').attr('content') || "";
-
-  const json = {
-    title,
-    description,
+  return {
+    success: true,
+    site_name:
+      $('meta[property="og:site_name"]').attr("content") || "Website",
+    title: title.trim(),
+    description: description.trim(),
     url: url || urrl,
-    site_name,
-    image: image || icon,
-    icon,
-    keywords
+    image: (image || icon).replace(/amp;/g, ""),
+    icon
   };
-
-  console.log(json);
-  return json;
 }
 
+// ===============================
+// 🧠 EXPRESS / VERCEL HANDLER
+// ===============================
 module.exports = async (request, response) => {
   const { url } = request.query;
-  if (!url || url == "" || url == " ") {
+  if (!url || url.trim() === "") {
     return response.status(400).json({
       success: false,
       error: "No url query specified.",
       usage
     });
   }
+
   try {
-    let metaRes = await meta(url);
-    metaRes.success = true;
+    const metaRes = await meta(url);
     response.status(200).json(metaRes);
   } catch (error) {
     response.status(400).json({
       success: false,
       url,
-      erData: error.toString(),
       erMessage: error.message,
-      error: "The server encountered an error. You may have inputted an invalid query.",
+      error:
+        "The server encountered an error. You may have inputted an invalid query.",
       usage
     });
   }
