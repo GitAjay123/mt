@@ -32,7 +32,7 @@ async function fetchPage(url) {
 }
 
 // ===============================
-// 🏪 DETA SCRAPER FUNCTION
+// 🏪 META SCRAPER FUNCTION
 // ===============================
 async function meta(urrl) {
   const page = await fetchPage(urrl);
@@ -53,7 +53,10 @@ async function meta(urrl) {
   const html = $.html();
 
   const isAmzn = urrl.includes("amazon.") || urrl.includes("amzn.");
-  const isFlipkart = urrl.includes("flipkart.com"); || urrl.includes("fkrt."); || urrl.includes("fktr.");
+  const isFlipkart =
+    urrl.includes("flipkart.com") ||
+    urrl.includes("fkrt.") ||
+    urrl.includes("fktr.");
 
   // ==================================================
   // 🟢 AMAZON SECTION
@@ -112,25 +115,31 @@ async function meta(urrl) {
     const title =
       $("span.B_NuCI").text().trim() ||
       $('meta[property="og:title"]').attr("content") ||
+      $('meta[name="og_title"]').attr("content") ||
       $("title").text().trim() ||
       "";
 
     const description =
       $("div._1mXcCf").text().trim() ||
       $('meta[property="og:description"]').attr("content") ||
+      $('meta[name="Description"]').attr("content") ||
       $('meta[name="description"]').attr("content") ||
+      $('meta[name="twitter:description"]').attr("content") ||
       "";
 
     let image =
+      $('meta[property="og:image"]').attr("content") ||
+      $('meta[name="og_image"]').attr("content") ||
+      $('meta[name="twitter:image"]').attr("content") ||
       $("img._396cs4").attr("src") ||
       $("img._2r_T1I").attr("src") ||
       $("img._3exPp9").attr("src") ||
-      $('meta[property="og:image"]').attr("content") ||
       "";
 
     if (image && image.startsWith("//")) image = "https:" + image;
 
-    const icon = "https://static-assets-web.flixcart.com/www/promos/new/20150528-140547-favicon-retina.ico";
+    const icon =
+      "https://static-assets-web.flixcart.com/www/promos/new/20150528-140547-favicon-retina.ico";
 
     return {
       success: true,
