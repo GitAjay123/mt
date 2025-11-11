@@ -54,7 +54,7 @@ async function meta(urrl) {
 
   const isAmzn = urrl.includes("amazon.") || urrl.includes("amzn.");
   const isFlipkart =
-    urrl.includes("flipkart.com") ||
+    urrl.includes("flipkart.") ||
     urrl.includes("fkrt.") ||
     urrl.includes("fktr.");
 
