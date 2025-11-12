@@ -1,9 +1,9 @@
 const cheerio = require("cheerio");
 const axios = require("axios");
 
-const usage = "https://detaagraber.vercel.app/api?url=https://google.com";
-const titleRegexp = /<title>([\s\S]*?)<\/title>/i;
-const descriptionRegex = /<meta[^>]*name=['"]description['"][^>]*content=['"]([^']*)['"][^>]*\/?>/i;
+const usage = "https://metagrabber.vercel.app/api?url=https://discord.com";
+const titleRegexp = /<title>(.*?)<\/title>/i;
+const descriptionRegex = /<meta.*name=['"]description['"].*content=['"]([^']*)['"].*\/?>/i;
 
 const userAgents = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -45,6 +45,7 @@ async function meta(urrl) {
       image: "",
       icon: "",
       site_name: "",
+      keywords: "",
       error: "Failed to fetch page or request timed out."
     };
   }
@@ -62,7 +63,7 @@ async function meta(urrl) {
     urrl.includes("fkrt.site");
 
   // ==================================================
-  // 🟢 AMAZON SECTION
+  // 🟢 AMAZON SECTION (Improved + high-res image logic)
   // ==================================================
   if (isAmzn) {
     const title =
@@ -89,61 +90,97 @@ async function meta(urrl) {
       $('meta[name="twitter:image"]').attr("content") ||
       "";
 
+    // Extract all images from the HTML and filter for product photos
     const amazonImageMatches = html.match(
-      /https:\/\/m\.media-amazon\.com\/images\/I\/[^;"']*_.jpg/g
+      /https:\/\/m\.media-amazon\.com\/images\/I\/[A-Za-z0-9%._-]+\.(?:jpg|png)/g
     );
-    if (!image && amazonImageMatches) {
-      image = amazonImageMatches.filter((img) => !img.includes(","))[0];
+    if (amazonImageMatches && amazonImageMatches.length > 0) {
+      const filtered = amazonImageMatches.filter(
+        (img) =>
+          !img.includes("sprite") &&
+          !img.includes("icon") &&
+          !img.includes("favicon") &&
+          !img.match(/_SX\d+_|_SY\d+_|_SS\d+_/g) // skip thumbnails
+      );
+      if (filtered.length > 0) image = filtered[0];
     }
 
+    // Upgrade resolution if needed
+    if (image) image = image.replace(/_SL\d+_/, "_SL1000_");
     if (image && image.startsWith("//")) image = "https:" + image;
 
-    const icon = "https://www.amazon.com/favicon.ico";
+    // Preserve your original Amazon icon and keywords
+    const icon =
+      "https://www.amazon.com/favicon.ico" ||
+      $('link[rel="icon"]').attr("href") ||
+      $('link[rel="shortcut icon"]').attr("href");
 
-    return {
+    if (!image) image = icon;
+    image = (image || "").replace(/amp;/g, "");
+
+    const keywords =
+      $('meta[property="og:keywords"]').attr("content") ||
+      $('meta[name="keywords"]').attr("content") ||
+      "";
+
+    const json = {
       success: true,
       site_name: "Amazon",
       title: title.trim(),
       description: description.trim(),
       url: url || urrl,
-      image: (image || icon).replace(/amp;/g, ""),
-      icon
+      image: image || icon,
+      icon,
+      keywords
     };
+    console.log(json);
+    return json;
   }
 
   // ==================================================
-  // 🟠 FLIPKART SECTION (Static Head Meta)
+  // 🟠 FLIPKART SECTION (head meta only)
   // ==================================================
   if (isFlipkart) {
-    // Flipkart includes <meta name="og_title"> etc. in raw HTML for SEO
     const title =
-      $('meta[name="og_title"]').attr("content") ||
       $('meta[property="og:title"]').attr("content") ||
+      $('meta[name="og_title"]').attr("content") ||
+      $("span.B_NuCI").text().trim() ||
       $("title").text().trim() ||
       "";
 
     const description =
+      $('meta[property="og:description"]').attr("content") ||
       $('meta[name="Description"]').attr("content") ||
       $('meta[name="description"]').attr("content") ||
-      $('meta[property="og:description"]').attr("content") ||
+      $("div._1mXcCf").text().trim() ||
       "";
 
     let image =
-      $('meta[name="og_image"]').attr("content") ||
       $('meta[property="og:image"]').attr("content") ||
+      $('meta[name="og_image"]').attr("content") ||
       $('meta[name="twitter:image"]').attr("content") ||
+      $("img._396cs4").attr("src") ||
+      $("img._2r_T1I").attr("src") ||
+      $("img._3exPp9").attr("src") ||
       "";
 
-    if (image && image.startsWith("//")) image = "https:" + image;
-
-    // fallback: Flipkart product images are hosted on rukmini/flixcart domains
     if (!image) {
-      const imgMatch = html.match(/https:\/\/rukmini\d*\.flixcart\.com\/image\/[^\s"']+/);
+      const imgMatch = html.match(
+        /https?:\/\/rukmini\d*\.flixcart\.com\/image\/[^\s"']+/i
+      );
       if (imgMatch) image = imgMatch[0];
     }
 
+    if (image && image.startsWith("//")) image = "https:" + image;
+    image = (image || "").replace(/amp;/g, "");
+
     const icon =
       "https://static-assets-web.flixcart.com/www/promos/new/20150528-140547-favicon-retina.ico";
+
+    const keywords =
+      $('meta[property="og:keywords"]').attr("content") ||
+      $('meta[name="keywords"]').attr("content") ||
+      "";
 
     return {
       success: true,
@@ -151,8 +188,9 @@ async function meta(urrl) {
       title: title.trim(),
       description: description.trim(),
       url: urrl,
-      image: (image || icon).replace(/amp;/g, ""),
-      icon
+      image: image || icon,
+      icon,
+      keywords
     };
   }
 
@@ -189,6 +227,11 @@ async function meta(urrl) {
     $('link[rel="shortcut icon"]').attr("href") ||
     "";
 
+  const keywords =
+    $('meta[property="og:keywords"]').attr("content") ||
+    $('meta[name="keywords"]').attr("content") ||
+    "";
+
   return {
     success: true,
     site_name:
@@ -197,7 +240,8 @@ async function meta(urrl) {
     description: description.trim(),
     url: url || urrl,
     image: (image || icon).replace(/amp;/g, ""),
-    icon
+    icon,
+    keywords
   };
 }
 
