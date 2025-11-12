@@ -112,34 +112,35 @@ async function meta(urrl) {
   }
 
   // ==================================================
-  // 🟠 FLIPKART SECTION
+  // 🟠 FLIPKART SECTION (Static Head Meta)
   // ==================================================
   if (isFlipkart) {
+    // Flipkart includes <meta name="og_title"> etc. in raw HTML for SEO
     const title =
-      $("span.B_NuCI").text().trim() ||
-      $('meta[property="og:title"]').attr("content") ||
       $('meta[name="og_title"]').attr("content") ||
+      $('meta[property="og:title"]').attr("content") ||
       $("title").text().trim() ||
       "";
 
     const description =
-      $("div._1mXcCf").text().trim() ||
-      $('meta[property="og:description"]').attr("content") ||
       $('meta[name="Description"]').attr("content") ||
       $('meta[name="description"]').attr("content") ||
-      $('meta[name="twitter:description"]').attr("content") ||
+      $('meta[property="og:description"]').attr("content") ||
       "";
 
     let image =
-      $('meta[property="og:image"]').attr("content") ||
       $('meta[name="og_image"]').attr("content") ||
+      $('meta[property="og:image"]').attr("content") ||
       $('meta[name="twitter:image"]').attr("content") ||
-      $("img._396cs4").attr("src") ||
-      $("img._2r_T1I").attr("src") ||
-      $("img._3exPp9").attr("src") ||
       "";
 
     if (image && image.startsWith("//")) image = "https:" + image;
+
+    // fallback: Flipkart product images are hosted on rukmini/flixcart domains
+    if (!image) {
+      const imgMatch = html.match(/https:\/\/rukmini\d*\.flixcart\.com\/image\/[^\s"']+/);
+      if (imgMatch) image = imgMatch[0];
+    }
 
     const icon =
       "https://static-assets-web.flixcart.com/www/promos/new/20150528-140547-favicon-retina.ico";
